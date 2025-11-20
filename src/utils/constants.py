@@ -6,7 +6,7 @@ RESET = '\x1b[0m'
 
 # Elements
 TOP = '$\\top$'
-BOTTOM = '$\\bot$'
+BOT = '$\\bot$'
 A = 'a'
 B = 'b'
 C = 'c'
