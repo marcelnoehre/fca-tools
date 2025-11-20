@@ -15,7 +15,6 @@ def construct_closure(
     Returns:
         Tuple[nx.DiGraph, Set[Tuple]]: A tuple containing the transitive closure graph and the set of edges in the closure.
     '''
-
     # Create a directed graph from the elements and relations
     G = nx.DiGraph()
     G.add_nodes_from(elements)
