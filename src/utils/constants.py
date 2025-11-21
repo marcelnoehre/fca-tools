@@ -33,3 +33,6 @@ W = 'w'
 X = 'x'
 Y = 'y'
 Z = 'z'
+
+# Formal Context Paths
+N5_PATH = 'src/fca/data/N5.csv'
