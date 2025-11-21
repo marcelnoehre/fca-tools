@@ -22,8 +22,8 @@ for name, (elements, relations) in data:
     for ext in linear_extensions:
         log(ext, YELLOW)
 
-    k, mle = all_minimal_realizers(linear_extensions, elements, poset_closure)
+    k, minimal_realizers = all_minimal_realizers(linear_extensions, elements, poset_closure)
 
     print(f"Minimum Linear Extensions (k={k}):")
-    for tuple in mle:
+    for tuple in minimal_realizers:
         log(tuple, GREEN)
