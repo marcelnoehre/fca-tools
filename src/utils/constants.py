@@ -36,3 +36,5 @@ Z = 'z'
 
 # Formal Context Paths
 N5_PATH = 'src/fca/data/N5.csv'
+M3_PATH = 'src/fca/data/M3.csv'
+ANIMAL_MOVEMENT_PATH = 'src/fca/data/animal_movement.csv'
