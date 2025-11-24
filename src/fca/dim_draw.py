@@ -5,7 +5,7 @@ from fcapy.lattice import ConceptLattice
 from collections import defaultdict, deque
 from src.fca.concept_lattice import cover_relations
 from src.utils.logger import log
-from src.utils.constants import RED, YELLOW, GREEN
+from src.utils.constants import RED, YELLOW, GREEN, MAGENTA, CYAN, RESET
 
 class DimDraw2D():
     ''''
@@ -81,7 +81,14 @@ class DimDraw2D():
             for node, coords in self.nodes.items()
         }
         self.nodes[self.realizer[0][-1]] = (0, 0)
+        self._legend()
     
+    def _legend(self):
+        for node in self.concept_lattice.to_networkx().nodes:
+            log(f'Node {node}:', MAGENTA)
+            print(f'New extent: {YELLOW}{self.concept_lattice.get_concept_new_extent(node)}{RESET}')
+            print(f'New intent: {YELLOW}{self.concept_lattice.get_concept_new_intent(node)}{RESET}')
+
     def _plot_lattice(self,
             filename: str,
             nodes: Dict[int, Tuple[int, int]],
@@ -100,8 +107,8 @@ class DimDraw2D():
         # Nodes
         for node, coordinate in nodes.items():
             plt.scatter([coordinate[0]], [coordinate[1]], color="orange" if node in highlight_nodes else "blue", zorder=3)
-            plt.text(coordinate[0], coordinate[1] + 0.3, self.concept_lattice.get_concept_new_intent(node), fontsize=12, ha='center', va='top', color='grey')
-            plt.text(coordinate[0], coordinate[1] - 0.3, self.concept_lattice.get_concept_new_extent(node), fontsize=12, ha='center', va='bottom', color='grey')
+            plt.text(coordinate[0], coordinate[1] + 0.5, node, fontsize=12, ha='center', va='top', color='grey')
+            plt.text(coordinate[0], coordinate[1] - 0.5, node, fontsize=12, ha='center', va='bottom', color='grey')
 
         # Relations
         for relation in relations:
@@ -168,10 +175,9 @@ class DimDraw2D():
                     y = 0
                     for p in pars:
                         px, py = self.top_down_additive[p]
-                        x += px
-                        y += py
-                    ox, oy = self.nodes[root]
-                    self.top_down_additive[node] = (x - ox, y - oy)
+                        x += self.nodes[root][0] - px
+                        y += self.nodes[root][1] - py
+                    self.top_down_additive[node] = (self.nodes[root][0] - x, self.nodes[root][1] - y)
                     q.append(node)
                     remaining.remove(node)
 
@@ -238,16 +244,16 @@ class DimDraw2D():
 
         def check(label, values):
             additive = True
-            log(f'{label}', YELLOW)
+            log(f'{label}', CYAN)
             to_str=lambda v: f"{float(v[0]):.2f}, {float(v[1]):.2f}"
             for node in self.concept_lattice.to_networkx().nodes:
-                if values[node] != self.nodes[node]:
+                if abs(values[node][0] - self.nodes[node][0]) > 1e-6 or abs(values[node][1] - self.nodes[node][1]) > 1e-6:
                     additive = False
-                    log(f"Not {f'{label} additive'.lower()} at node {node}: expected {to_str(self.nodes[node])}, got {to_str(values[node])}", RED)
+                    log(f"Not {f'{label}'.lower()} at node {YELLOW}{node}{RED}: expected {YELLOW}({to_str(self.nodes[node])}){RED}, got {YELLOW}({to_str(values[node])})", RED)
             if additive:
                 log(f"The DimDraw drawing is {f'{label} additive'.lower()}", GREEN)
             return additive
 
-        self.check_bottom_up_additive = check('Bottom Up', self.bottom_up_additive)
-        self.check_top_down_additive = check('Top Down', self.top_down_additive)
-        self.check_combined_additive = check('Combined', self.scaled_combined_additive)
+        self.check_bottom_up_additive = check('Bottom Up Additive', self.bottom_up_additive)
+        self.check_top_down_additive = check('Top Down Additive', self.top_down_additive)
+        self.check_combined_additive = check('Combined Additive', self.scaled_combined_additive)

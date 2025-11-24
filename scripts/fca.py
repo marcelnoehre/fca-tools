@@ -6,7 +6,7 @@ warnings.filterwarnings('ignore')
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname('src'), '..')))
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-from src.utils.constants import ANIMAL_MOVEMENT_PATH, N5_PATH
+from src.utils.constants import N5_PATH, M3_PATH, ANIMAL_MOVEMENT_PATH
 from src.naive.linear_extensions import all_minimal_realizers
 from src.fca.formal_context import *
 from src.fca.concept_lattice import *
