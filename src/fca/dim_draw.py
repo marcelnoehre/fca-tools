@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from typing import List, Dict, Tuple
 from fcapy.lattice import ConceptLattice
 from collections import defaultdict, deque
-from src.fca.concept_lattice import cover_relations, all_children, all_parents
+from src.fca.concept_lattice import *
 from src.utils.logger import log
 from src.utils.constants import RED, YELLOW, GREEN, MAGENTA, CYAN, RESET
 
@@ -41,6 +41,8 @@ class DimDraw2D():
         '''
         self.concept_lattice = concept_lattice
         self.realizer = realizer
+        self.objects = extent_of_concept(self.concept_lattice, self.realizer[0][0])
+        self.features = intent_of_concept(self.concept_lattice, self.realizer[0][-1])
         self._setup_grid()
 
     def _setup_grid(self):
@@ -141,8 +143,8 @@ class DimDraw2D():
     def _bottom_up_additive(self):
         root = self.realizer[0][-1]
         
-        base_vectors = copy.deepcopy(self.join_irreducibles)
-        base_vectors[root] = self.nodes[root]
+        self.base_vectors_bottom = copy.deepcopy(self.join_irreducibles)
+        self.base_vectors_bottom[root] = self.nodes[root]
 
         self.bottom_up_additive = {}
         self.bottom_up_additive[root] = self.nodes[root]
@@ -155,16 +157,16 @@ class DimDraw2D():
             if all(child in self.bottom_up_additive for child in children):
                 if node in self.join_irreducibles:
                     self.bottom_up_additive[node] = (
-                        base_vectors[node][0] + base_vectors[list(self.concept_lattice.children_dict[node])[0]][0],
-                        base_vectors[node][1] + base_vectors[list(self.concept_lattice.children_dict[node])[0]][1]
+                        self.base_vectors_bottom[node][0] + self.base_vectors_bottom[list(self.concept_lattice.children_dict[node])[0]][0],
+                        self.base_vectors_bottom[node][1] + self.base_vectors_bottom[list(self.concept_lattice.children_dict[node])[0]][1]
                     )
                 else:
                     px, py = 0, 0
                     for child in all_children(self.concept_lattice, node):
                         if child in self.join_irreducibles:
-                            px += base_vectors[child][0]
-                            py += base_vectors[child][1]
-                    base_vectors[node] = (px, py)
+                            px += self.base_vectors_bottom[child][0]
+                            py += self.base_vectors_bottom[child][1]
+                    self.base_vectors_bottom[node] = (px, py)
                     self.bottom_up_additive[node] = (px, py)
 
                 for p in self.concept_lattice.parents(node):
@@ -175,8 +177,8 @@ class DimDraw2D():
             
     def _top_down_additive(self):
         root = self.realizer[0][0]
-        base_vectors = copy.deepcopy(self.meet_irreducibles)
-        base_vectors[root] = (0, 0)
+        self.base_vectors_top = copy.deepcopy(self.meet_irreducibles)
+        self.base_vectors_top[root] = (0, 0)
 
         self.top_down_additive = {}
         self.top_down_additive[root] = self.nodes[root]
@@ -188,43 +190,59 @@ class DimDraw2D():
             if all(parent in self.top_down_additive for parent in parents):
                 if node in self.meet_irreducibles:
                     parent = list(self.concept_lattice.parents_dict[node])[0]
-                    if parent not in base_vectors:
+                    if parent not in self.base_vectors_top:
                         pass
 
                     self.top_down_additive[node] = (
-                        self.nodes[root][0] - (base_vectors[node][0] + base_vectors[parent][0]),
-                        self.nodes[root][1] - (base_vectors[node][1] + base_vectors[parent][1])
+                        self.nodes[root][0] - (self.base_vectors_top[node][0] + self.base_vectors_top[parent][0]),
+                        self.nodes[root][1] - (self.base_vectors_top[node][1] + self.base_vectors_top[parent][1])
                     )
-                        
-
+                    
                 else:
                     px, py = 0, 0
                     for parent in parents:
                         if parent in self.meet_irreducibles:
-                            px += base_vectors[parent][0]
-                            py += base_vectors[parent][1]
-                    base_vectors[node] = (px, py)
+                            px += self.base_vectors_top[parent][0]
+                            py += self.base_vectors_top[parent][1]
+                    self.base_vectors_top[node] = (px, py)
                     self.top_down_additive[node] = (self.nodes[root][0] - px, self.nodes[root][1] - py)
                 queue.extend(self.concept_lattice.children(node))
             else:
                 queue.append(node)
                 
+    def _combined_position(self, intent, extent):
+        pos = (0, 0)
+        for feature in self.features:
+            if feature in intent:
+                continue
+            pos = (
+                pos[0] + self.base_vectors_top[feature[0]][0],
+                pos[1] + self.base_vectors_top[feature[0]][1]
+            )
+        for object in extent:
+            if object[0] not in self.join_irreducibles.keys():
+                continue
+            pos = (
+                pos[0] + self.base_vectors_bottom[object[0]][0],
+                pos[1] + self.base_vectors_bottom[object[0]][1]
+            )
+        return pos
 
     def _combined_additive(self):
-        min_x_top = min(x for x, _ in self.top_down_additive.values())
-        min_y_top = min(y for _, y in self.top_down_additive.values())
-        min_x_bot = min(x for x, _ in self.bottom_up_additive.values())
-        min_y_bot = min(y for _, y in self.bottom_up_additive.values())
-        
-        correction_x = (max(0, -min_x_top) + max(0, -min_x_bot)) / 2
-        correction_y = (max(0, -min_y_top) + max(0, -min_y_bot)) / 2
-
+        root = self.realizer[0][-1]
+        self.features = intent_of_concept(self.concept_lattice, root)
         self.combined_additive = {}
-        for node in self.concept_lattice.to_networkx().nodes:
-            self.combined_additive[node] = (
-                (self.bottom_up_additive[node][0] + correction_x) + (self.top_down_additive[node][0] + correction_x),
-                (self.bottom_up_additive[node][1] + correction_y) + (self.top_down_additive[node][1] + correction_y)
-            )
+        self.combined_additive[root] = self.nodes[root]
+
+        self.combined_additive[root] = self._combined_position(intent_of_concept(self.concept_lattice, root), extent_of_concept(self.concept_lattice, root))
+
+        queue = deque(self.concept_lattice.parents(root))
+        while queue:
+            node = queue.popleft()
+            self.combined_additive[node] = self._combined_position(intent_of_concept(self.concept_lattice, node), extent_of_concept(self.concept_lattice, node))
+            for p in self.concept_lattice.parents(node):
+                if p not in queue and p not in self.combined_additive:
+                    queue.append(p)
 
         top = min(self.nodes.keys())
         bottom = max(self.nodes.keys())
