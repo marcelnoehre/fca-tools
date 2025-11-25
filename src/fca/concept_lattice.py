@@ -46,3 +46,25 @@ def all_parents(concept_lattice: ConceptLattice, index: int) -> Set[int]:
                 queue.append(parent)
 
     return result
+
+def intent_of_concept(concept_lattice: ConceptLattice, index: int) -> Set[int]:
+    parents = all_parents(concept_lattice, index)
+    intent = set()
+    for feature in concept_lattice.get_concept_new_intent(index):
+        intent.add((index, feature))
+    for parent in parents:
+        for feature in concept_lattice.get_concept_new_intent(parent):
+            intent.add((parent, feature))
+    return intent
+
+def extent_of_concept(concept_lattice: ConceptLattice, index: int) -> Set[int]:
+    children = all_children(concept_lattice, index)
+    extent = set()
+    for obj in concept_lattice.get_concept_new_extent(index):
+        extent.add((index, obj))
+    for child in children:
+        for obj in concept_lattice.get_concept_new_extent(child):
+            extent.add((child, obj))
+            
+    return extent
+
