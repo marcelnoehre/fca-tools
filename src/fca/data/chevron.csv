@@ -1,0 +1,7 @@
+,m1,m2,m3,m4,m5,m6
+g1,True,True,True,False,True,True
+g2,False,True,False,False,True,False
+g3,False,False,True,False,False,True
+g4,False,False,False,True,True,True
+g5,False,False,False,False,True,False
+g6,False,False,False,False,False,True

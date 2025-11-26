@@ -1,8 +1,7 @@
 import copy
-from platform import node
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional, Tuple
 from fcapy.lattice import ConceptLattice
 from collections import defaultdict, deque
 from src.fca.concept_lattice import *
@@ -97,26 +96,44 @@ class DimDraw2D():
             filename: str,
             nodes: Dict[int, Tuple[int, int]],
             relations: List[Tuple[Tuple[int, int], Tuple[int, int]]],
-            highlight_nodes: List[int] = []
+            highlight_nodes: List[int] = [],
+            args: Optional[Dict[str, bool]] = None
         ):
+        if args is None:
+            args = {}
+        for key in ['grid', 'concepts']:
+            if key not in args:
+                args[key] = False
+
+        theta = np.pi / 4
+        R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta),  np.cos(theta)]])
+        
         plt.figure(figsize=(8, 6))
         # Grid
-        for node, positions in self.grid.items():
-            for pos in positions:
-                plt.scatter([pos[0]], [pos[1]], color="lightgrey", zorder=1)
-                plt.text(pos[0] - 0.2, pos[1] - 0.2, node, fontsize=12, color='grey')
-        for connection in self.connections:
-            plt.plot([connection[0][0], connection[1][0]], [connection[0][1], connection[1][1]], color="lightgrey", zorder=1)
+        if args['grid']:
+            for node, positions in self.grid.items():
+                for pos in positions:
+                    x, y = R @ np.array(pos)
+                    plt.scatter(x, y, color="lightgrey", zorder=1)
+                    plt.text(x - 0.2, y - 0.2, node, fontsize=12, color='grey')
+            for connection in self.connections:
+                x0, y0 = R @ np.array(connection[0])
+                x1, y1 = R @ np.array(connection[1])
+                plt.plot([x0, x1], [y0, y1], color="lightgrey", zorder=1)
 
         # Nodes
         for node, coordinate in nodes.items():
-            plt.scatter([coordinate[0]], [coordinate[1]], color="orange" if node in highlight_nodes else "blue", zorder=3)
-            plt.text(coordinate[0], coordinate[1] + 0.35, self.concept_lattice.get_concept_new_extent(node), fontsize=12, ha='center', va='top', color='grey')
-            plt.text(coordinate[0], coordinate[1] - 0.35, self.concept_lattice.get_concept_new_intent(node), fontsize=12, ha='center', va='bottom', color='grey')
+            x, y = R @ np.array(coordinate)
+            plt.scatter(x, y, color="orange" if node in highlight_nodes else "blue", zorder=3)
+            if args['concepts']:
+                plt.text(x, y + 0.5, self.concept_lattice.get_concept_new_extent(node), fontsize=12, ha='center', va='top', color='grey')
+                plt.text(x, y - 0.5, self.concept_lattice.get_concept_new_intent(node), fontsize=12, ha='center', va='bottom', color='grey')
 
         # Relations
         for relation in relations:
-            plt.plot([relation[0][0], relation[1][0]], [relation[0][1], relation[1][1]], color="black", zorder=2)
+            x0, y0 = R @ np.array(relation[0])
+            x1, y1 = R @ np.array(relation[1])
+            plt.plot([x0, x1], [y0, y1], color="black", zorder=2)
 
         plt.axis("equal")
         plt.axis("off")
@@ -314,28 +331,28 @@ class DimDraw2D():
         
         self.scaled_combined_additive = { k: _transform(v) for k, v in self.combined_additive.items() }
 
-    def plot_dim_draw(self):
+    def plot_dim_draw(self, args: Optional[Dict[str, bool]] = None):
         '''
         Plot the concept lattice using the dim draw approach.
         '''
         relations = [(self.nodes[a], self.nodes[b]) for a, b in cover_relations(self.concept_lattice)]
-        self._plot_lattice("dim_draw.png", self.nodes, relations)
+        self._plot_lattice("dim_draw.png", self.nodes, relations, [], args)
 
-    def plot_bottom_up_additive(self):
+    def plot_bottom_up_additive(self, args: Optional[Dict[str, bool]] = None):
         relations = [(self.bottom_up_additive[a], self.bottom_up_additive[b]) for a, b in cover_relations(self.concept_lattice)]
-        self._plot_lattice("bottom_up_additive.png", self.bottom_up_additive, relations, self.join_irreducibles)
+        self._plot_lattice("bottom_up_additive.png", self.bottom_up_additive, relations, self.join_irreducibles, args)
 
-    def plot_top_down_additive(self):
+    def plot_top_down_additive(self, args: Optional[Dict[str, bool]] = None):
         relations = [(self.top_down_additive[a], self.top_down_additive[b]) for a, b in cover_relations(self.concept_lattice)]
-        self._plot_lattice("top_down_additive.png", self.top_down_additive, relations, self.meet_irreducibles)
+        self._plot_lattice("top_down_additive.png", self.top_down_additive, relations, self.meet_irreducibles, args)
 
-    def plot_combined_additive(self):
+    def plot_combined_additive(self, args: Optional[Dict[str, bool]] = None):
         relations = [(self.combined_additive[a], self.combined_additive[b]) for a, b in cover_relations(self.concept_lattice)]
-        self._plot_lattice("combined_additive.png", self.combined_additive, relations)
+        self._plot_lattice("combined_additive.png", self.combined_additive, relations, [], args)
 
-    def plot_scaled_combined_additive(self):
+    def plot_scaled_combined_additive(self, args: Optional[Dict[str, bool]] = None):
         relations = [(self.scaled_combined_additive[a], self.scaled_combined_additive[b]) for a, b in cover_relations(self.concept_lattice)]
-        self._plot_lattice("scaled_combined_additive.png", self.scaled_combined_additive, relations)
+        self._plot_lattice("scaled_combined_additive.png", self.scaled_combined_additive, relations, [], args)
 
     def check_additivity(self) -> bool:
         '''
