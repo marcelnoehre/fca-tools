@@ -1,6 +1,7 @@
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
+from sympy import symbols, Eq, solve, sympify
 from typing import List, Dict, Optional, Tuple
 from fcapy.lattice import ConceptLattice
 from collections import defaultdict, deque
@@ -261,7 +262,7 @@ class DimDraw2D():
                 # re-add to queue if parents not processed yet
                 queue.append(node)
                 
-    def _combined_position(self, intent, extent):
+    def _combined_position(self, complement_intent, extent):
         # bottom element as initial position
         pos = (0, 0)
 
@@ -269,12 +270,11 @@ class DimDraw2D():
         for feature in self.features:
             # M \ B
             # all features not in the concept's intent
-            if feature in intent:
-                continue
-            pos = (
-                pos[0] + self.base_vectors_top[feature[0]][0],
-                pos[1] + self.base_vectors_top[feature[0]][1]
-            )
+            if feature in complement_intent:
+                pos = (
+                    pos[0] + self.base_vectors_top[feature[0]][0],
+                    pos[1] + self.base_vectors_top[feature[0]][1]
+                )
 
         # sum up base vectors 
         for object in extent:
@@ -298,42 +298,47 @@ class DimDraw2D():
         self.combined_additive = {}
         self.combined_additive[root] = self.nodes[root]
 
+        self.variables = [f'{prefix}_{v}' for prefix in ('x', 'y') for _, v in list(self.objects) + list(self.features)]
+        self.equations = []
+
         # combined position for the root node
-        self.combined_additive[root] = self._combined_position(intent_of_concept(self.concept_lattice, root), extent_of_concept(self.concept_lattice, root))
+        complement_intent = [f for f in self.features if f not in intent_of_concept(self.concept_lattice, root)]
+        extent = extent_of_concept(self.concept_lattice, root)
+        self.combined_additive[root] = self._combined_position(complement_intent, extent)
+        variables = [v for _, v in extent] + [v for _, v in complement_intent]
+        self.equations.append((' + '.join(f'x_{v}' for v in variables) if variables else '0') + f' = {self.nodes[root][0]}')
+        self.equations.append((' + '.join(f'y_{v}' for v in variables) if variables else '0') + f' = {self.nodes[root][1]}')
 
         queue = deque(self.concept_lattice.parents(root))
         while queue:
             node = queue.popleft()
             # combined position for the node
-            self.combined_additive[node] = self._combined_position(intent_of_concept(self.concept_lattice, node), extent_of_concept(self.concept_lattice, node))
+            complement_intent = [f for f in self.features if f not in intent_of_concept(self.concept_lattice, node)]
+            extent = extent_of_concept(self.concept_lattice, node)
+            self.combined_additive[node] = self._combined_position(complement_intent, extent)
+            variables = [v for _, v in extent] + [v for _, v in complement_intent]
+            self.equations.append((' + '.join(f'x_{v}' for v in variables) if variables else '0') + f' = {self.nodes[node][0]}')
+            self.equations.append((' + '.join(f'y_{v}' for v in variables) if variables else '0') + f' = {self.nodes[node][1]}')
             
             # add parents if not already processed or in queue
             for p in self.concept_lattice.parents(node):
                 if p not in queue and p not in self.combined_additive:
                     queue.append(p)
 
-    def _scale_combined_additive(self):
-        top = min(self.nodes.keys())
-        bottom = max(self.nodes.keys())
-
-        pos_original_top = np.array(self.nodes[top], dtype=float)
-        pos_original_bottom = np.array(self.nodes[bottom], dtype=float)
-
-        pos_combined_top = np.array(self.combined_additive[top], dtype=float)
-        pos_combined_bottom = np.array(self.combined_additive[bottom], dtype=float)
-
-        # scale = target_distance (original) / current_distance (combined) 
-        scale = (pos_original_bottom - pos_original_top) / (pos_combined_bottom - pos_combined_top)
-        # use minimum scale to maintain aspect ratio
-        t = pos_original_top - scale * pos_combined_top
-
-        def _transform(point):
-            # transform point based on scale and translation
-            v = np.array(point, dtype=float)
-            return tuple(scale * v + t)
+    def _check_combined_additive(self) -> bool:
+        vars = symbols(' '.join(self.variables))
+        eqs = []
+        for eq in self.equations:
+            left, right = eq.split('=')
+            eqs.append(Eq(sympify(left), sympify(right)))
         
-        self.scaled_combined_additive = { k: _transform(v) for k, v in self.combined_additive.items() }
-
+        solution_list = solve(eqs, vars, dict=True)
+        log('Combined Additive', CYAN)
+        if not solution_list:
+            log('The DimDraw drawing is not combined additive', RED)
+        else:
+            log('The DimDraw drawing is combined additive', GREEN)
+                    
     def plot_dim_draw(self, args: Optional[Dict[str, bool]] = None):
         '''
         Plot the concept lattice using the dim draw approach.
@@ -353,10 +358,6 @@ class DimDraw2D():
         relations = [(self.combined_additive[a], self.combined_additive[b]) for a, b in cover_relations(self.concept_lattice)]
         self._plot_lattice("combined_additive.png", self.combined_additive, relations, [], args)
 
-    def plot_scaled_combined_additive(self, args: Optional[Dict[str, bool]] = None):
-        relations = [(self.scaled_combined_additive[a], self.scaled_combined_additive[b]) for a, b in cover_relations(self.concept_lattice)]
-        self._plot_lattice("scaled_combined_additive.png", self.scaled_combined_additive, relations, [], args)
-
     def check_additivity(self) -> bool:
         '''
         Check if the current drawing is additive.
@@ -368,7 +369,6 @@ class DimDraw2D():
         self._bottom_up_additive()
         self._top_down_additive()
         self._combined_additive()
-        self._scale_combined_additive()
 
         def check(label, values):
             additive = True
@@ -387,4 +387,4 @@ class DimDraw2D():
 
         self.check_bottom_up_additive = check('Bottom Up Additive', self.bottom_up_additive)
         self.check_top_down_additive = check('Top Down Additive', self.top_down_additive)
-        self.check_combined_additive = check('Combined Additive', self.scaled_combined_additive)
+        self.check_combined_additive = self._check_combined_additive()

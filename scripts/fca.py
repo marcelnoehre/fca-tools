@@ -10,10 +10,9 @@ from src.utils.constants import *
 from src.naive.linear_extensions import all_minimal_realizers
 from src.fca.formal_context import *
 from src.fca.concept_lattice import *
-from src.fca.plot import plot_concept_lattice_vsl
 from src.fca.dim_draw import DimDraw2D
 
-fc = formal_context(os.path.join(BASE_DIR, N5_PATH))
+fc = formal_context(os.path.join(BASE_DIR, ANIMAL_MOVEMENT_PATH))
 cl = concept_lattice(fc)
 k, realizers = all_minimal_realizers(linear_extensions(cl), cl.to_networkx().nodes, transitive_closure(cl))
 if k == 2:
@@ -24,4 +23,3 @@ if k == 2:
         dim_draw.plot_bottom_up_additive({'grid': True})
         dim_draw.plot_top_down_additive({'grid': True})
         dim_draw.plot_combined_additive({'grid': True})
-        dim_draw.plot_scaled_combined_additive({'grid': True})
