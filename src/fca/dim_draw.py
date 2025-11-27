@@ -186,6 +186,16 @@ class DimDraw2D():
             # all children have to be processed first
             if all(child in self.bottom_up_additive for child in children):
                 if node in self.join_irreducibles:
+                    child = self.concept_lattice.children(node)
+                    child_vector = self.base_vectors_bottom[list(child)[0]]
+                    # if the child is a join-irreducible, sum up the chain until a non-join-irreducible is found
+                    while list(child)[0] in self.join_irreducibles:
+                        child = self.concept_lattice.children(list(child)[0])
+                        child_vector = (
+                            child_vector[0] + self.base_vectors_bottom[list(child)[0]][0],
+                            child_vector[1] + self.base_vectors_bottom[list(child)[0]][1]
+                        )
+
                     # base vector of join-irreducible + base vector of the single child
                     self.bottom_up_additive[node] = (
                         self.base_vectors_bottom[node][0] + self.base_vectors_bottom[list(self.concept_lattice.children(node))[0]][0],
@@ -234,11 +244,22 @@ class DimDraw2D():
             # all parents have to be processed first
             if all(parent in self.top_down_additive for parent in parents):
                 if node in self.meet_irreducibles:
+                    parent = self.concept_lattice.parents(node)
+                    parent_vector = self.base_vectors_top[list(parent)[0]]
+                    
+                    # if the parent is a meet-irreducible, sum up the chain until a non-meet-irreducible is found
+                    while list(parent)[0] in self.meet_irreducibles:
+                        parent = self.concept_lattice.parents(list(parent)[0])
+                        parent_vector = (
+                            parent_vector[0] + self.base_vectors_top[list(parent)[0]][0],
+                            parent_vector[1] + self.base_vectors_top[list(parent)[0]][1]
+                        )
+
                     # top node - (base vector of meet-irreducible + base vector of the single parent)
                     # ensures a positive base vector from parent to child
                     self.top_down_additive[node] = (
-                        self.nodes[root][0] - (self.base_vectors_top[node][0] + self.base_vectors_top[list(self.concept_lattice.parents(node))[0]][0]),
-                        self.nodes[root][1] - (self.base_vectors_top[node][1] + self.base_vectors_top[list(self.concept_lattice.parents(node))[0]][1])
+                        self.nodes[root][0] - (self.base_vectors_top[node][0] + parent_vector[0]),
+                        self.nodes[root][1] - (self.base_vectors_top[node][1] + parent_vector[1])
                     )
 
                 else:
