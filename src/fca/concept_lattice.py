@@ -1,6 +1,6 @@
-from unittest import result
 import networkx as nx
-from collections import deque
+from itertools import chain, combinations
+from collections import Counter, deque
 from typing import List, Set, Tuple
 from fcapy.context import FormalContext
 from fcapy.lattice import ConceptLattice
@@ -68,3 +68,22 @@ def extent_of_concept(concept_lattice: ConceptLattice, index: int) -> Set[int]:
             
     return extent
 
+def powerset(iterable):
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
+
+def partial_linear_extensions(concept_lattice: ConceptLattice) -> List[List[int]]:
+    G = concept_lattice.to_networkx()
+    extensions = []
+    for subset in powerset(G.nodes):
+        subgraph = G.subgraph(subset).copy()
+        extensions.extend(list(nx.all_topological_sorts(subgraph)))
+    return extensions
+
+def local_dimension(partial_realizers):
+    return min(max(Counter(ple for ple in pr for ple in ple).values()) for pr in partial_realizers)
+
+def relative_dimension(partial_realizers, elements):
+    if not elements:
+        return 0
+    return min(sum(len(ple) for ple in pr) / len(elements) for pr in partial_realizers)

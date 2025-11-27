@@ -128,6 +128,8 @@ class DimDraw2D():
             if args['concepts']:
                 plt.text(x, y + 0.5, self.concept_lattice.get_concept_new_extent(node), fontsize=12, ha='center', va='top', color='grey')
                 plt.text(x, y - 0.5, self.concept_lattice.get_concept_new_intent(node), fontsize=12, ha='center', va='bottom', color='grey')
+            else:
+                plt.text(x - 0.2, y - 0.2, node, fontsize=12, ha='center', va='bottom', color='grey')
 
         # Relations
         for relation in relations:
@@ -137,6 +139,7 @@ class DimDraw2D():
 
         plt.axis("equal")
         plt.axis("off")
+        plt.tight_layout()
         plt.savefig(filename)
         plt.show()
 

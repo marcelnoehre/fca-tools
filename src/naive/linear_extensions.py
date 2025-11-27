@@ -68,3 +68,24 @@ def all_minimal_realizers(linear_extensions: List[List], elements: List, poset_c
         ]
         if valid_sets:
             return k, valid_sets
+        
+def all_minimal_partial_realizers(partial_linear_extensions: List[List], elements: List, poset_closure: Set[Tuple]):
+    def intersection_of_partial_orders(orders, elements):
+        pair_all = set()
+        for i in elements:
+            for j in elements:
+                if i == j:
+                    continue
+                if all(i in order and j in order and order.index(i) < order.index(j) for order in orders if i in order and j in order):
+                    pair_all.add((i, j))
+        _, poset_closure = construct_closure(elements, pair_all)
+        return poset_closure
+    
+    for k in range(1, len(partial_linear_extensions) + 1):
+        valid_sets = [
+            k_partial_linear_extensions
+            for k_partial_linear_extensions in combinations(partial_linear_extensions, k)
+            if intersection_of_partial_orders(k_partial_linear_extensions, elements) == poset_closure]
+        if valid_sets:
+            return k, valid_sets
+        
