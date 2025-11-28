@@ -1,2 +1,3 @@
 fcapy
 networkx
+sympy

@@ -166,6 +166,10 @@ class DimDraw2D():
             )
 
     def _bottom_up_additive(self):
+        '''
+        X := G
+        (A, B) -> A 
+        '''
         # root = bottom element
         root = self.realizer[0][-1]
         
@@ -224,6 +228,10 @@ class DimDraw2D():
                 queue.append(node)
             
     def _top_down_additive(self):
+        '''
+        X := M
+        (A, B) -> M \ B
+        '''
         # root = top element
         root = self.realizer[0][0]
 
@@ -282,50 +290,66 @@ class DimDraw2D():
             else:
                 # re-add to queue if parents not processed yet
                 queue.append(node)
+
+    def _solve(self, prefix, node, solution_list, free_vars, vector_variables, expected):
+        eq = [] # construct equation to solve for the current node
+        for var in [s for group in self.base_vectors_combined[node] for (_, s) in group]:
+            var = f'{prefix}{var}'
+            if var in vector_variables:
+                eq.append(str(vector_variables[var]))
+            elif symbols(var) in free_vars:
+                eq.append(str(var))
+            else:
+                sub_eq = str(solution_list[0][symbols(var)])
+                for k, v in vector_variables.items():
+                    sub_eq = sub_eq.replace(str(k), str(v))
+                if not any(var in sub_eq for var in self.variables):
+                    vector_variables[var] = int(eval(sub_eq, {"__builtins__": None}))
+                    sub_eq = str(vector_variables[var])
+                eq.append(f'({sub_eq})')
+
+        eq = ' + '.join(eq)
+
+        # if the equation contains variables, solve it
+        if any(var in eq for var in self.variables):
+            # define sympy variables and equations
+            expr_vars = [v for v in self.variables if eq.find(v) != -1]
+            expr_symbols = symbols(' '.join(expr_vars))
+            expr = Eq(sympify(eq), expected) 
+            solution = solve(expr, expr_symbols, dict=True)
+            
+            # if a solution is found, update the variable values
+            if solution:
+                for k, v in solution[0].items():
+                    vector_variables[str(k)] = int(v)
+            
+            # if no solution is found the variables cancel out -> assign 0 to all variables
+            else:
+                for var in expr_vars:
+                    if str(var) not in list(vector_variables.keys()):
+                        vector_variables[str(var)] = 0
+
+        # updated vector variables
+        return vector_variables
                 
-    def _combined_position(self, complement_intent, extent):
-        # bottom element as initial position
-        pos = (0, 0)
-
-        # sum up base vectors 
-        for feature in self.features:
-            # M \ B
-            # all features not in the concept's intent
-            if feature in complement_intent:
-                pos = (
-                    pos[0] + self.base_vectors_top[feature[0]][0],
-                    pos[1] + self.base_vectors_top[feature[0]][1]
-                )
-
-        # sum up base vectors 
-        for object in extent:
-            # A
-            # all objects in the concept's extent 
-            # only consider join-irreducibles
-            if object[0] not in self.join_irreducibles.keys():
-                continue
-            pos = (
-                pos[0] + self.base_vectors_bottom[object[0]][0],
-                pos[1] + self.base_vectors_bottom[object[0]][1]
-            )
-
-        # final position of a node in the combined additive drawing
-        return pos
-
     def _combined_additive(self):
+        '''
+        X := G U M
+        (A, B) -> A U (M \ B)
+        '''
         # root = bottom element
         root = self.realizer[0][-1]
 
-        self.combined_additive = {}
-        self.combined_additive[root] = self.nodes[root]
-
         self.variables = [f'{prefix}_{v}' for prefix in ('x', 'y') for _, v in list(self.objects) + list(self.features)]
         self.equations = []
+        self.base_vectors_combined = {}
 
-        # combined position for the root node
-        complement_intent = [f for f in self.features if f not in intent_of_concept(self.concept_lattice, root)]
+        # vectors for the root node
         extent = extent_of_concept(self.concept_lattice, root)
-        self.combined_additive[root] = self._combined_position(complement_intent, extent)
+        complement_intent = [f for f in self.features if f not in intent_of_concept(self.concept_lattice, root)]
+        self.base_vectors_combined[root] = (list(extent), complement_intent)
+        
+        # linear equations for the root node
         variables = [v for _, v in extent] + [v for _, v in complement_intent]
         self.equations.append((' + '.join(f'x_{v}' for v in variables) if variables else '0') + f' = {self.nodes[root][0]}')
         self.equations.append((' + '.join(f'y_{v}' for v in variables) if variables else '0') + f' = {self.nodes[root][1]}')
@@ -333,33 +357,85 @@ class DimDraw2D():
         queue = deque(self.concept_lattice.parents(root))
         while queue:
             node = queue.popleft()
-            # combined position for the node
-            complement_intent = [f for f in self.features if f not in intent_of_concept(self.concept_lattice, node)]
+            # vectors for the node
             extent = extent_of_concept(self.concept_lattice, node)
-            self.combined_additive[node] = self._combined_position(complement_intent, extent)
+            complement_intent = [f for f in self.features if f not in intent_of_concept(self.concept_lattice, node)]
+            self.base_vectors_combined[node] = (list(extent), complement_intent)
+
+            # linear equations for the node
             variables = [v for _, v in extent] + [v for _, v in complement_intent]
             self.equations.append((' + '.join(f'x_{v}' for v in variables) if variables else '0') + f' = {self.nodes[node][0]}')
             self.equations.append((' + '.join(f'y_{v}' for v in variables) if variables else '0') + f' = {self.nodes[node][1]}')
             
             # add parents if not already processed or in queue
             for p in self.concept_lattice.parents(node):
-                if p not in queue and p not in self.combined_additive:
+                if p not in queue and p not in self.base_vectors_combined:
                     queue.append(p)
 
-    def _check_combined_additive(self) -> bool:
+        # define sympy variables and equations
         vars = symbols(' '.join(self.variables))
         eqs = []
         for eq in self.equations:
             left, right = eq.split('=')
             eqs.append(Eq(sympify(left), sympify(right)))
-        
+
+        # solve equations
         solution_list = solve(eqs, vars, dict=True)
-        log('Combined Additive', CYAN)
-        if not solution_list:
-            log('The DimDraw drawing is not combined additive', RED)
-        else:
-            log('The DimDraw drawing is combined additive', GREEN)
-                    
+        
+        # identify free variables that can take any value
+        free_vars = [v for v in vars if v not in solution_list[0]]
+
+        # extract already fixed variable values
+        vector_variables = {}
+        for k, v in solution_list[0].items():
+            try:
+                vector_variables[str(k)] = int(v)
+            except TypeError:
+                continue
+
+        # add root node
+        self.combined_additive = {}
+        pos = (0, 0)
+        for index, prefix in enumerate(['x_', 'y_']):
+            # solve until all variables for the current node are known
+            while not all(f'{prefix}{var}' in vector_variables.keys() for var in [s for group in self.base_vectors_combined[root] for (_, s) in group]):
+                vector_variables = self._solve(prefix, root, solution_list, free_vars, vector_variables, self.nodes[root][index])
+        
+            # sum up all base vectors for the root node
+            # index defines the direction (0 = x, 1 = y)
+            for vec in [s for group in self.base_vectors_combined[root] for (_, s) in group]:
+                pos = (
+                    pos[0] + vector_variables[f'{prefix}{vec}'] if index == 0 else pos[0],
+                    pos[1] + vector_variables[f'{prefix}{vec}'] if index == 1 else pos[1]
+                )
+
+        self.combined_additive[root] = pos
+
+        queue = deque(self.concept_lattice.parents(root))
+        while queue:
+            node = queue.popleft()
+
+            pos = (0, 0) # bottom up approach
+            for index, prefix in enumerate(['x_', 'y_']):
+                # solve until all variables for the current node are known
+                while not all(f'{prefix}{var}' in vector_variables.keys() for var in [s for group in self.base_vectors_combined[node] for (_, s) in group]):
+                    vector_variables = self._solve(prefix, node, solution_list, free_vars, vector_variables, self.nodes[node][index])
+            
+                # sum up all base vectors for the current node
+                # index defines the direction (0 = x, 1 = y)
+                for vec in [s for group in self.base_vectors_combined[node] for (_, s) in group]:
+                    pos = (
+                        pos[0] + vector_variables[f'{prefix}{vec}'] if index == 0 else pos[0],
+                        pos[1] + vector_variables[f'{prefix}{vec}'] if index == 1 else pos[1]
+                    )
+
+            self.combined_additive[node] = pos
+
+            # add parents if not already processed or in queue
+            for p in self.concept_lattice.parents(node):
+                if p not in queue and p not in self.combined_additive:
+                    queue.append(p)
+
     def plot_dim_draw(self, args: Optional[Dict[str, bool]] = None):
         '''
         Plot the concept lattice using the dim draw approach.
@@ -408,4 +484,4 @@ class DimDraw2D():
 
         self.check_bottom_up_additive = check('Bottom Up Additive', self.bottom_up_additive)
         self.check_top_down_additive = check('Top Down Additive', self.top_down_additive)
-        self.check_combined_additive = self._check_combined_additive()
+        self.check_combined_additive = check('Combined Additive', self.combined_additive)
