@@ -9,6 +9,9 @@ from fcapy.lattice import ConceptLattice
 def concept_lattice(formal_context: FormalContext) -> ConceptLattice:
     return ConceptLattice.from_context(formal_context)
 
+def incomparability_graph(concept_lattice: ConceptLattice) -> nx.Graph:
+    return nx.complement(nx.transitive_closure(concept_lattice.to_networkx()).to_undirected())
+
 def count_linear_extensions(complement_concept_lattice: ConceptLattice) -> int:
     counts = defaultdict(int) # initialize counts to 0
     counts[0] = 1 # top element gets count 1
@@ -75,7 +78,6 @@ def all_linear_extensions(
     linear_extensions = set()
 
     for intent_chain in intent_chains:
-        print('NEW LINEAR EXTENSION')
         # start with top element
         linear_extension = [len(list(concept_lattice.to_networkx().nodes)) - 1]
         intent_chain.pop(0) # remove top element intent
