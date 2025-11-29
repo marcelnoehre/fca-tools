@@ -1,6 +1,6 @@
 import networkx as nx
 from itertools import chain, combinations
-from collections import Counter, deque
+from collections import Counter, deque, defaultdict
 from typing import List, Set, Tuple
 from fcapy.context import FormalContext
 from fcapy.lattice import ConceptLattice
@@ -8,7 +8,32 @@ from fcapy.lattice import ConceptLattice
 def concept_lattice(formal_context: FormalContext) -> ConceptLattice:
     return ConceptLattice.from_context(formal_context)
 
-def linear_extensions(concept_lattice: ConceptLattice) -> List[List[int]]:
+def count_linear_extensions(concept_lattice: ConceptLattice) -> int:
+    counts = defaultdict(int) # initialize counts to 0
+    counts[0] = 1 # top element gets count 1
+
+    queue = deque(concept_lattice.children(0))
+    while queue:
+        node = queue.popleft()
+        parents = concept_lattice.parents(node)
+
+        if all(parent in counts for parent in parents):
+            # sum up counts from parents
+            counts[node] = sum(counts[parent] for parent in parents)
+            
+            # add children to queue
+            children = concept_lattice.children(node)
+            for child in children:
+                if child not in queue:
+                    queue.append(child)
+
+        else:
+            queue.append(node) # re-add to queue
+    
+    # bottom element holds count of linear extensions
+    return counts[len(concept_lattice.to_networkx()) - 1]
+
+def linear_extensions_topological(concept_lattice: ConceptLattice) -> List[List[int]]:
     return list(nx.all_topological_sorts(concept_lattice.to_networkx()))
 
 def cover_relations(concept_lattice: ConceptLattice) -> Set[Tuple[int, int]]:
