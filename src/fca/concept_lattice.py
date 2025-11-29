@@ -1,3 +1,4 @@
+import copy
 import networkx as nx
 from itertools import chain, combinations
 from collections import Counter, deque, defaultdict
@@ -8,21 +9,21 @@ from fcapy.lattice import ConceptLattice
 def concept_lattice(formal_context: FormalContext) -> ConceptLattice:
     return ConceptLattice.from_context(formal_context)
 
-def count_linear_extensions(concept_lattice: ConceptLattice) -> int:
+def count_linear_extensions(complement_concept_lattice: ConceptLattice) -> int:
     counts = defaultdict(int) # initialize counts to 0
     counts[0] = 1 # top element gets count 1
 
-    queue = deque(concept_lattice.children(0))
+    queue = deque(complement_concept_lattice.children(0))
     while queue:
         node = queue.popleft()
-        parents = concept_lattice.parents(node)
+        parents = complement_concept_lattice.parents(node)
 
         if all(parent in counts for parent in parents):
             # sum up counts from parents
             counts[node] = sum(counts[parent] for parent in parents)
             
             # add children to queue
-            children = concept_lattice.children(node)
+            children = complement_concept_lattice.children(node)
             for child in children:
                 if child not in queue:
                     queue.append(child)
@@ -31,7 +32,65 @@ def count_linear_extensions(concept_lattice: ConceptLattice) -> int:
             queue.append(node) # re-add to queue
     
     # bottom element holds count of linear extensions
-    return counts[len(concept_lattice.to_networkx()) - 1]
+    return counts[len(complement_concept_lattice.to_networkx()) - 1]
+
+def all_linear_extensions(
+        concept_lattice: ConceptLattice,
+        complement_concept_lattice: ConceptLattice
+    ) -> Set[List[int]]:
+
+    def feature_chains(
+            concept_lattice: ConceptLattice,
+            intent_chain: List[List[Set[str]]] = [[]],
+            node: int = 0,
+        ) -> List[List[Set[str]]]:
+
+        # add intent of current node to last chain
+        intent_chain[len(intent_chain) - 1].append(intent_of_concept(concept_lattice, node).difference(*intent_chain[len(intent_chain) - 1]))
+        
+        children = concept_lattice.children(node)
+
+        # follow single child chains
+        while len(children) == 1:
+            intent_chain[len(intent_chain) - 1].append(intent_of_concept(concept_lattice, list(children)[0]).difference(*intent_chain[len(intent_chain) - 1]))
+            children = concept_lattice.children(list(children)[0])
+        
+        # branch on multiple children
+        if len(children) > 1:
+            # store current intent state
+            intent_state = copy.deepcopy(intent_chain[-1])
+
+            for i, child in enumerate(children):
+                # for all but first child, create new chain starting from saved state
+                if i != 0:
+                    intent_chain.append(copy.deepcopy(intent_state))
+                
+                # recursively process child
+                intent_chain = feature_chains(concept_lattice, intent_chain, child)
+
+        return intent_chain
+    
+    intent_chains = feature_chains(complement_concept_lattice)
+
+    linear_extensions = set()
+
+    for intent_chain in intent_chains:
+        print('NEW LINEAR EXTENSION')
+        # start with top element
+        linear_extension = [len(list(concept_lattice.to_networkx().nodes)) - 1]
+        intent_chain.pop(0) # remove top element intent
+
+        # map nodes to the intents they introduce
+        intent_dict = { node: concept_lattice.get_concept_new_intent(node) for node in concept_lattice.to_networkx().nodes }
+        
+        for intent in intent_chain:
+            # find parent with matching intent
+            node = next(k for k, v in intent_dict.items() if v == {x[1] for x in intent})
+            linear_extension.append(node)
+
+        linear_extensions.add(tuple(reversed(linear_extension + [0])))
+    
+    return linear_extensions
 
 def linear_extensions_topological(concept_lattice: ConceptLattice) -> List[List[int]]:
     return list(nx.all_topological_sorts(concept_lattice.to_networkx()))
